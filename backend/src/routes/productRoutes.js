@@ -1,6 +1,6 @@
 import express from "express";
 import cloudinary from "../lib/cloudinary.js";
-import Book from "../models/Book.js";
+import Product from "../models/Product.js";
 import protectRoute from "../middleware/auth.middleware.js";
 
 const router = express.Router();
@@ -17,8 +17,8 @@ router.post("/", protectRoute, async (req, res) => {
     const uploadResponse = await cloudinary.uploader.upload(image);
     const imageUrl = uploadResponse.secure_url;
 
-    // functions to save to the database
-    const newBook = new Book({
+    // save to the database
+    const newProduct = new Product({
       title,
       caption,
       rating,
@@ -26,9 +26,9 @@ router.post("/", protectRoute, async (req, res) => {
       user: req.user._id,
     });
 
-    await newBook.save();
+    await newProduct.save();
 
-    res.status(201).json(newBook);
+    res.status(201).json(newProduct);
   } catch (error) {
     console.log("Error creating book", error);
     res.status(500).json({ message: error.message });
@@ -38,25 +38,25 @@ router.post("/", protectRoute, async (req, res) => {
 // pagination => infinite loading
 router.get("/", protectRoute, async (req, res) => {
   // example call from react native - frontend
-
+  // const response = await fetch("http://localhost:3000/api/books?page=1&limit=5");
   try {
     const page = req.query.page || 1;
     const limit = req.query.limit || 2;
     const skip = (page - 1) * limit;
 
-    const books = await Book.find()
+    const products = await Product.find()
       .sort({ createdAt: -1 }) // desc
       .skip(skip)
       .limit(limit)
       .populate("user", "username profileImage");
 
-    const totalBooks = await Book.countDocuments();
+    const totalProducts = await Product.countDocuments();
 
     res.send({
-      books,
+      products,
       currentPage: page,
-      totalBooks,
-      totalPages: Math.ceil(totalBooks / limit),
+      totalProducts,
+      totalPages: Math.ceil(totalProducts / limit),
     });
   } catch (error) {
     console.log("Error in get all books route", error);
@@ -64,11 +64,11 @@ router.get("/", protectRoute, async (req, res) => {
   }
 });
 
-// get all books by the user when logged in
+// get recommended books by the logged in user
 router.get("/user", protectRoute, async (req, res) => {
   try {
-    const books = await Book.find({ user: req.user._id }).sort({ createdAt: -1 });
-    res.json(books);
+    const products = await Product.find({ user: req.user._id }).sort({ createdAt: -1 });
+    res.json(products);
   } catch (error) {
     console.error("Get user books error:", error.message);
     res.status(500).json({ message: "Server error" });
@@ -77,25 +77,25 @@ router.get("/user", protectRoute, async (req, res) => {
 
 router.delete("/:id", protectRoute, async (req, res) => {
   try {
-    const book = await Book.findById(req.params.id);
-    if (!book) return res.status(404).json({ message: "Book not found" });
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ message: "Book not found" });
 
     // check if user is the creator of the book
-    if (book.user.toString() !== req.user._id.toString())
+    if (product.user.toString() !== req.user._id.toString())
       return res.status(401).json({ message: "Unauthorized" });
 
-
-    //this function will delete image from cloduinary as well as from the db
-    if (book.image && book.image.includes("cloudinary")) {
+    // https://res.cloudinary.com/de1rm4uto/image/upload/v1741568358/qyup61vejflxxw8igvi0.png
+    // delete image from cloduinary as well
+    if (product.image && product.image.includes("cloudinary")) {
       try {
-        const publicId = book.image.split("/").pop().split(".")[0];
+        const publicId = product.image.split("/").pop().split(".")[0];
         await cloudinary.uploader.destroy(publicId);
       } catch (deleteError) {
         console.log("Error deleting image from cloudinary", deleteError);
       }
     }
 
-    await book.deleteOne();
+    await product.deleteOne();
 
     res.json({ message: "Book deleted successfully" });
   } catch (error) {
